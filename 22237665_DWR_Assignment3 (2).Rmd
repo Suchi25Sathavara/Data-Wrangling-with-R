@@ -1,0 +1,323 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#importing dataset
+setwd("C:/Users/DC/Documents/Assignment_3_data")
+accident_df <- read.csv("accident.csv", header = TRUE, sep = ",")
+node_df <- read.csv("node.csv", header = TRUE, sep = ",")
+person_df <- read.csv("person.csv", header = TRUE, sep = ",")
+
+```
+```{r}
+#inspect each dataset
+head(accident_df)
+head(node_df)
+head(person_df)
+```
+
+
+```{r}
+#merge dataset
+library(dplyr)
+merged_data <- left_join(accident_df, person_df, by = "ACCIDENT_NO",relationship="many-to-many")
+dataset <- left_join(merged_data, node_df, by = "ACCIDENT_NO", relationship="many-to-many")
+#head(dataset)
+glimpse(dataset)
+summary(dataset)
+```
+```{r}
+library(summarytools)
+dfSummary(dataset)
+View(dfSummary(dataset))
+dim(dataset)
+```
+```{r}
+#question 2
+#TO CHECK MISSING VALUES
+colSums(is.na(dataset))
+```
+```{r}
+library(dplyr)
+dataset <- dataset %>% distinct()
+#row that contains missing value
+dataset[!complete.cases(dataset), ]
+```
+```{r}
+#Question 2
+#Quality Assesment
+
+#FOR HELMET BELT WORN
+dataset$HELMET_BELT_WORN[is.na(dataset$HELMET_BELT_WORN)] <- "Unknown"
+sum(is.na(dataset$HELMET_BELT_WORN)) 
+#FOR SEATING_POSITION
+dataset$SEATING_POSITION[is.na(dataset$SEATING_POSITION)] <- "Unknown"
+sum(is.na(dataset$SEATING_POSITION)) 
+```
+```{r}
+dataset[!complete.cases(dataset), ]
+dim(dataset)
+```
+```{r}
+clean_dataset <- na.omit(dataset)
+clean_dataset
+colSums(is.na(clean_dataset))
+dim(clean_dataset)
+```
+```{r}
+#DATA TYPES
+# Convert 'ACCIDENT_DATE' to a Date object
+clean_dataset$ACCIDENT_DATE <- as.Date(clean_dataset$ACCIDENT_DATE, format = "%Y-%m-%d")
+
+clean_dataset$SPEED_ZONE <- as.factor(clean_dataset$SPEED_ZONE)
+clean_dataset$ACCIDENT_NO <- as.factor(clean_dataset$ACCIDENT_NO)
+
+summary(clean_dataset)
+```
+```{r}
+# Standardize gender
+clean_dataset$SEX <- toupper(clean_dataset$SEX)
+clean_dataset$SEX <- gsub("MALE", "M", clean_dataset$SEX)
+clean_dataset$SEX <- gsub("FEMALE", "F", clean_dataset$SEX)
+```
+```{r}
+#remove duplicate
+library(dplyr)
+clean_dataset <- distinct(clean_dataset)
+```
+
+
+```{r}
+#QUESTION 3
+#Accident by surbub and accident type
+
+accident_counts_by_lga <- clean_dataset %>%
+  count(LGA_NAME, sort = TRUE)
+
+print(accident_counts_by_lga)
+
+library(ggplot2)
+
+ggplot(accident_counts_by_lga, aes(x = LGA_NAME, y = n)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +  
+  labs(title = "Accident Distribution by LGA",
+       x = "Local Government Area",
+       y = "Number of Accidents") +
+  theme_minimal()
+install.packages("tidyverse")
+library(tidyverse)
+accident_types_by_lga <- clean_dataset %>%
+  group_by(LGA_NAME, ACCIDENT_TYPE_DESC) %>%
+  summarize(n = n(), .groups = "drop") %>%
+  pivot_wider(names_from = ACCIDENT_TYPE_DESC, values_from = n, values_fill = 0)
+
+print(accident_types_by_lga)
+
+accident_types_by_lga_long <- clean_dataset %>%
+  group_by(LGA_NAME, ACCIDENT_TYPE_DESC) %>%
+  summarize(n = n(), .groups = "drop")
+
+ggplot(accident_types_by_lga_long, aes(x = LGA_NAME, y = n, fill = ACCIDENT_TYPE_DESC)) +
+  geom_bar(stat = "identity", position = "fill") +  # Use position = "fill" for proportions
+  coord_flip() +
+  labs(title = "Accident Types by LGA (Proportions)",
+       x = "Local Government Area",
+       y = "Proportion of Accidents",
+       fill = "Accident Type") +
+  theme_minimal()
+```
+```{r}
+
+#QUESTION 04
+
+
+library(dplyr)
+library(lubridate) 
+
+
+clean_dataset$ACCIDENT_TIME <- as.character(clean_dataset$ACCIDENT_TIME)
+
+clean_dataset$ACCIDENT_HOUR <- as.numeric(substr(clean_dataset$ACCIDENT_TIME, 1, 2))
+
+clean_dataset$ACCIDENT_DATE <- as.Date(clean_dataset$ACCIDENT_DATE, format = "%Y-%m-%d")   
+clean_dataset$ACCIDENT_DAY <- weekdays(clean_dataset$ACCIDENT_DATE)
+
+clean_dataset$ACCIDENT_DAY <- factor(clean_dataset$ACCIDENT_DAY, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+
+hourly_accident_counts <- clean_dataset %>%
+    count(ACCIDENT_HOUR, sort = TRUE)
+
+print(hourly_accident_counts)
+
+library(ggplot2)
+
+ggplot(hourly_accident_counts, aes(x = ACCIDENT_HOUR, y = n)) +
+    geom_line(color = "blue", size = 1) +
+    geom_point(color = "blue", size = 2) + 
+    labs(title = "Accident Frequency by Hour of Day",
+         x = "Hour of Day",
+         y = "Number of Accidents") +
+    theme_minimal() +
+    scale_x_continuous(breaks = 0:23) 
+
+
+daily_accident_counts <- clean_dataset %>%
+    count(ACCIDENT_DAY, sort = FALSE) 
+
+print(daily_accident_counts)
+
+
+hourly_daily_accidents <- clean_dataset %>%
+    group_by(ACCIDENT_DAY, ACCIDENT_HOUR) %>%
+    summarize(n = n(), .groups = "drop")
+
+ggplot(hourly_daily_accidents, aes(x = ACCIDENT_HOUR, y = ACCIDENT_DAY, fill = n)) +
+    geom_tile() +
+    scale_fill_gradient(low = "lightyellow", high = "red") +
+    labs(title = "Accident Frequency by Hour and Day",
+         x = "Hour of Day",
+         y = "Day of Week",
+         fill = "Number of Accidents") +
+    theme_minimal() +
+    scale_x_continuous(breaks = 0:50)
+
+pie_chart <- ggplot(daily_accident_counts, aes(x = "", y = n, fill = ACCIDENT_DAY)) +
+  geom_bar(stat = "identity", width = 1) +  # width = 1 makes the bars fill the entire circle
+  coord_polar("y", start = 0) +  
+  labs(title = "Accident Frequency by Day of Week",
+       fill = "Day of Week") +
+  theme_void() +  
+  theme(legend.position = "bottom") + 
+ 
+  geom_text(aes(label = paste0(round(n / sum(n) * 100), "%")), position = position_stack(vjust = 0.5))
+
+
+
+labs(title = "Accident Frequency by Day of Week",
+       fill = "Day of Week") +
+  theme_void() +  # Remove unnecessary plot elements
+  theme(legend.position = "bottom") + # Move legend to the bottom for better readability
+
+
+print(pie_chart)
+```
+
+```{r}
+#Question 05
+
+#PATTERN 1: USE SPEED_ZONE
+
+table(clean_dataset$SPEED_ZONE) 
+ggplot(clean_dataset, aes(x = factor(SPEED_ZONE))) +
+  geom_bar(fill = "steelblue", color = "black") +
+  labs(title = "Accident Count by Speed Zone",
+       x = "Speed Zone (km/h)",
+       y = "Number of Accidents") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+
+
+install.packages("treemap")
+library(treemap)
+speed_zone_counts <- clean_dataset %>%
+  group_by(SPEED_ZONE) %>%
+  summarise(accident_count = n(), .groups = "drop")
+treemap(speed_zone_counts,
+        index = "SPEED_ZONE",       
+        vSize = "accident_count",   
+        type = "index",             
+        title = "Accident Count by Speed Zone",
+        palette = "Blues",          
+        fontsize.labels = 12,       
+        border.col = "white")       
+
+```
+```{r}
+#pattern 2
+# Count accidents by road user type
+library(dplyr)
+road_user_counts <- clean_dataset %>%
+  count(ROAD_USER_TYPE_DESC, sort = TRUE)
+
+# Calculate the percentage of accidents for each road user type
+total_accidents <- nrow(merged_data)
+road_user_counts$percentage <- (road_user_counts$n / total_accidents) * 100
+
+print(road_user_counts)
+library(ggplot2)
+ggplot(road_user_counts, aes(x = reorder(ROAD_USER_TYPE_DESC, -n), y = percentage)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +  
+  labs(title = "Accident Distribution by Road User Type",
+       x = "Road User Type",
+       y = "Percentage of Total Accidents") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+#pattern 3
+
+age_injury_table <- table(clean_dataset$AGE_GROUP, clean_dataset$INJ_LEVEL_DESC)
+age_injury_row_pct <- prop.table(age_injury_table, margin = 1) * 100
+
+print(age_injury_row_pct)
+
+
+age_injury_df <- as.data.frame(age_injury_row_pct)
+#renamaing the column
+colnames(age_injury_df) <- c("AGE_GROUP", "INJ_LEVEL_DESC", "Percentage")
+
+#ordered 
+age_injury_df$AGE_GROUP <- factor(age_injury_df$AGE_GROUP, levels = unique(age_injury_df$AGE_GROUP))
+
+
+
+ggplot(age_injury_df, aes(x = AGE_GROUP, y = Percentage, fill = INJ_LEVEL_DESC)) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(title = "Injury Level by Age Group",
+       x = "Age Group",
+       y = "Percentage",
+       fill = "Injury Level") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+```{r}
+#Pattern 4
+library(dplyr)
+install.packages(lubridate)
+library(lubridate)
+
+
+clean_dataset$ACCIDENT_TIME <- as.character(clean_dataset$ACCIDENT_TIME)
+clean_dataset$ACCIDENT_HOUR <- as.numeric(substr(clean_dataset$ACCIDENT_TIME, 1, 2))
+
+
+clean_dataset$ACCIDENT_DATE <- as.Date(clean_dataset$ACCIDENT_DATE, format = "%Y-%m-%d")  
+
+clean_dataset$ACCIDENT_DAY <- weekdays(clean_dataset$ACCIDENT_DATE)
+clean_dataset$ACCIDENT_DAY <- factor(clean_dataset$ACCIDENT_DAY, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+
+hourly_accident_counts <- clean_dataset %>%
+    count(ACCIDENT_HOUR, sort = TRUE)
+
+print(hourly_accident_counts)
+
+library(ggplot2)
+
+ggplot(hourly_accident_counts, aes(x = ACCIDENT_HOUR, y = n)) +
+    geom_line(color = "black", size = 1) +
+    geom_point(color = "black", size = 2) +  
+    labs(title = "Accident Frequency by Hour of Day",
+         x = "Hour of Day",
+         y = "Number of Accidents") +
+    theme_minimal() +
+    scale_x_continuous(breaks = 0:23)  
+
+
+```
+
